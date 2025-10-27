@@ -1,3 +1,4 @@
+const superagent = require("superagent");
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
@@ -39,17 +40,35 @@ const server = http.createServer(async (req, res) => {
   try {
     switch (method) {
       // === GET ===
-      case "GET": {
-        try {
-          const data = await fs.promises.readFile(filePath);
-          res.writeHead(200, { "Content-Type": "image/jpeg" });
-          res.end(data);
-        } catch (err) {
-          res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
-          res.end("❌ Not Found: no such image in cache");
-        }
-        break;
-      }
+case "GET": {
+  try {
+    // спроба прочитати файл із кешу
+    const data = await fs.promises.readFile(filePath);
+    res.writeHead(200, { "Content-Type": "image/jpeg" });
+    res.end(data);
+  } catch (err) {
+    console.log(`⚠️ Not in cache. Fetching from https://http.cat/${code}.jpg ...`);
+    try {
+      // завантажуємо з https://http.cat
+      const response = await superagent.get(`https://http.cat/${code}.jpg`).responseType("blob");
+
+      const buffer = response.body; // зображення
+      // зберігаємо в кеш
+      await fs.promises.writeFile(filePath, buffer);
+
+      // відправляємо клієнту
+      res.writeHead(200, { "Content-Type": "image/jpeg" });
+      res.end(buffer);
+      console.log(`✅ Cached and sent image for code ${code}`);
+    } catch (fetchError) {
+      // якщо http.cat не має такої картинки
+      res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+      res.end("❌ Not Found on server or cache");
+      console.error(`❌ Failed to fetch https://http.cat/${code}.jpg`);
+    }
+  }
+  break;
+}
 
       // === PUT ===
       case "PUT": {
